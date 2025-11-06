@@ -1,4 +1,5 @@
 import numpy as np
+from math import sqrt
 
 time_series_t = np.ndarray[1,float]
 
@@ -42,3 +43,30 @@ class TimeSeriesAnalyser(Filters):
             input_array=input_array,
             filter_=weights, 
         )
+
+    @staticmethod
+    def Mean(input_array : time_series_t) -> float:
+        N = len(input_array)
+        return sum(input_array) / N
+
+    @staticmethod
+    def Variance(input_array : time_series_t) -> float:
+        return TimeSeriesAnalyser.Mean(
+            (input_array - TimeSeriesAnalyser.Mean(
+                input_array
+            ))**2
+        )
+
+    @staticmethod
+    def StandardDeviation(input_array : time_series_t) -> float:
+        return sqrt(
+            TimeSeriesAnalyser.Variance(input_array)
+        )
+
+    @staticmethod
+    def CoefficientOfVariance(input_array : time_series_t) -> float:
+        return (TimeSeriesAnalyser.StandardDeviation(
+            input_array
+        ) / TimeSeriesAnalyser.Mean(
+            input_array
+        ))
