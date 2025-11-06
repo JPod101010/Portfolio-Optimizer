@@ -17,20 +17,25 @@ A = Action
 class Position():
     pos_id = 0
 
-    def __init__(self, pos_t : P, open_price : float, size : float = 1.0):
+    def __init__(self, pos_t : P, entry_price : float, size : float = 1.0):
         Position.pos_id += 1
         self.type = pos_t
         self.size = size
-        self.open_price = open_price
-        self.close_price = None
+        self.entry_price = entry_price
+        self.exit_price = None
         self.closed = False
         self.profit = None
 
-    def __calculate_profit(self):
-        return (self.open_price - self.close_price if self.type == P.LONG 
-                else self.close_price - self.open_price)
+    def __repr__(self):
+        return f"<Pos#{self.id} {self.type.__repr__()} @ {self.entry_price}>"
 
-    def close(self, exit_price : float) -> float:
-        self.close_price = exit_price
+    def __calculate_profit(self) -> float:
+        return (self.entry_price - self.exit_price if self.type == P.LONG 
+                else self.exit_price - self.entry_price)
+
+    def close(self, exit_price : float):
+        if self.closed:
+            raise ValueError("Cannot close a closed position")
+        self.exit_price = exit_price
         self.closed = True
         self.profit = self.__calculate_profit()
