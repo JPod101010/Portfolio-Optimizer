@@ -1,5 +1,4 @@
 import numpy as np
-from math import sqrt, prod
 from typing import Tuple, List
 
 time_series_t = np.ndarray[1,float]
@@ -29,8 +28,117 @@ class Filters:
             result[n] = val
 
         return result
-
+    
+    @staticmethod
+    def DiffArithmetic(input_array : time_series_t, lag : int = 1) -> time_series_t:
+        return (
+            input_array[:-lag] - input_array[lag:]
+        )
+    
+    @staticmethod
+    def DiffGeometric(input_array : time_series_t, lag : int = 1) -> time_series_t:
+        return (
+            (input_array[:-lag] - input_array[lag:]) / input_array[:-lag]
+        )
+    
 class TimeSeriesAnalyser(Filters):
+    @staticmethod 
+    def RawMoment(input_array : time_series_t, order : int = 0) -> float:
+        indexes = np.arange(1, len(input_array) + 1)   #assuming we index the ts from 0
+        return np.sum(input_array * (indexes ** order))
+    
+    @staticmethod
+    def StandardMoment(input_array : time_series_t, order : int = 1) -> float:
+        mean = TimeSeriesAnalyser.Mean(input_array)
+        return TimeSeriesAnalyser.Mean(
+            (input_array - mean) ** order
+        ) / (TimeSeriesAnalyser.StandardDeviation(
+            input_array
+        ) ** order)
+
+    @staticmethod
+    def Skewness(input_array : time_series_t) -> float:
+        return TimeSeriesAnalyser.StandardMoment(
+            input_array,
+            order=3
+        )
+
+    @staticmethod
+    def Kurtosis(input_array : time_series_t) -> float:
+        return TimeSeriesAnalyser.StandardMoment(
+            input_array,
+            order=4
+        )
+
+    @staticmethod
+    def Mean(input_array : time_series_t) -> float:
+        return np.sum(input_array) / len(input_array)
+
+    @staticmethod
+    def GeometricMean(input_array : time_series_t) -> float:
+        return np.prod(input_array) ** (1/len(input_array))
+    
+    @staticmethod
+    def HarmonicMean(input_array : time_series_t) -> float:
+        return len(input_array) / sum(1/input_array)
+    
+    @staticmethod
+    def Covariance(input_array : time_series_t,
+                   input_array_other : time_series_t) -> float:
+        mean = TimeSeriesAnalyser.Mean(input_array)
+        mean_other = TimeSeriesAnalyser.Mean(input_array_other)
+
+        return TimeSeriesAnalyser.Mean(
+            (input_array - mean) * (input_array_other - mean_other)
+        )
+
+    @staticmethod
+    def AutoCovariance(input_array : time_series_t, lag : int = 1) -> float:
+        return TimeSeriesAnalyser.Covariance(
+            input_array[:-lag] if lag != 0 else input_array,
+            input_array[lag:] if lag != 0 else input_array
+        )
+
+    @staticmethod
+    def Variance(input_array : time_series_t) -> float:
+        return TimeSeriesAnalyser.AutoCovariance(
+            input_array,
+            lag=0
+        )
+    
+    @staticmethod
+    def StandardDeviation(input_array : time_series_t) -> float:
+        return np.sqrt(
+            TimeSeriesAnalyser.Variance(input_array)
+        )
+
+    @staticmethod
+    def CoefficientOfVariance(input_array : time_series_t) -> float:
+        return (TimeSeriesAnalyser.StandardDeviation(
+            input_array
+        ) / TimeSeriesAnalyser.Mean(
+            input_array
+        ))
+
+    @staticmethod
+    def CorrelationCoefficient(input_array : time_series_t, 
+                               input_array_other : time_series_t) -> float:
+        cov = TimeSeriesAnalyser.Covariance(input_array, input_array_other)
+        stddev = TimeSeriesAnalyser.StandardDeviation(input_array)
+        stddev_other = TimeSeriesAnalyser.StandardDeviation(input_array_other)
+        return cov / (stddev * stddev_other)
+
+
+    @staticmethod
+    def AutoCorrelation(input_array : time_series_t, lag : int = 1) -> float:
+        return TimeSeriesAnalyser.CorrelationCoefficient(
+            input_array[:-lag],
+            input_array[lag:]
+        )
+
+    """
+    Complex analysis
+    """
     @staticmethod
     def SMA(input_array : time_series_t, window : int) -> time_series_t:
         if window <= 0:
@@ -44,78 +152,6 @@ class TimeSeriesAnalyser(Filters):
             input_array=input_array,
             filter_=weights, 
         )
-
-    @staticmethod
-    def Mean(input_array : time_series_t) -> float:
-        N = len(input_array)
-        return sum(input_array) / N
-
-    @staticmethod
-    def Variance(input_array : time_series_t) -> float:
-        return TimeSeriesAnalyser.Mean(
-            (input_array - TimeSeriesAnalyser.Mean(
-                input_array
-            ))**2
-        )
-
-    @staticmethod
-    def StandardDeviation(input_array : time_series_t) -> float:
-        return sqrt(
-            TimeSeriesAnalyser.Variance(input_array)
-        )
-
-    @staticmethod
-    def CoefficientOfVariance(input_array : time_series_t) -> float:
-        return (TimeSeriesAnalyser.StandardDeviation(
-            input_array
-        ) / TimeSeriesAnalyser.Mean(
-            input_array
-        ))
-    
-    @staticmethod
-    def GeometricMean(input_array : time_series_t) -> float:
-        return prod(input_array) ** (1/len(input_array))
-
-
-    @staticmethod
-    def Covariance(input_arrayA : time_series_t, 
-                   input_arrayB : time_series_t) -> float:
-        """
-        Tells how are the two time series correlated:
-        >0 : positive correlation
-        0  : no correlation
-        <0 : negative correlation 
-        """
-        return TimeSeriesAnalyser.Mean(
-            (input_arrayA - TimeSeriesAnalyser.Mean(input_arrayA)) * 
-            (input_arrayB - TimeSeriesAnalyser.Mean(input_arrayB))
-        )
-
-
-    @staticmethod
-    def Correlation(input_arrayA : time_series_t, 
-                    input_arrayB : time_series_t) -> float:
-        """
-        Pearsons correlation coefficient TODO:
-        """
-        MEAN_A = TimeSeriesAnalyser.Mean(input_arrayA)
-        MEAN_B = TimeSeriesAnalyser.Mean(input_arrayB)
-
-        numerator = sum((input_arrayA - MEAN_A) * (input_arrayB - MEAN_B))
-        denominator = sqrt(
-            sum((input_arrayA - MEAN_A**2)) *
-            sum((input_arrayB - MEAN_B**2))
-        )
-
-        return numerator / denominator
-
-    @staticmethod
-    def AutoCorrelation(input_array : time_series_t, lag : int = 1) -> float:
-        return TimeSeriesAnalyser.Correlation(
-            input_arrayA=input_array[:-lag],
-            input_arrayB=input_array[lag:]
-        )
-
     
     @staticmethod
     def AutoCorrelationAnalysis(input_array : time_series_t, MAX_LAG = 30) -> List[float]:
@@ -129,17 +165,23 @@ class TimeSeriesAnalyser(Filters):
             )
         return ret_l
 
-    
     @staticmethod
-    def BasicAnalysis(input_array : time_series_t) -> Tuple[float]:
+    def BasicAnalysis(input_array : time_series_t, verbose : bool = True) -> Tuple[float]:
+        """
+        Returns order:
+        EX, VX, DX, CV, SKW, KRR
+        """
         EX = TimeSeriesAnalyser.Mean(input_array)
         VX = TimeSeriesAnalyser.Variance(input_array)
         DX = TimeSeriesAnalyser.StandardDeviation(input_array)
         CV = TimeSeriesAnalyser.CoefficientOfVariance(input_array)
-        EDM = EX * CV 
+        SKW = TimeSeriesAnalyser.Skewness(input_array)
+        KRR = TimeSeriesAnalyser.Kurtosis(input_array)
 
-        print(f"Mean : {EX}\nVariance : {VX}\nStandard-Deviation : {DX}\nCoefficient of variance : {CV}\nExpected daily move : {EDM}")
+        if verbose:
+            print(f"Mean : {EX}\nVariance : {VX}\nStandard-Deviation : {DX}\nCoefficient of variance : {CV}\n")
+            print(f"Skewness : {SKW}\nKurtosis : {KRR}")
 
         return (
-            EX, VX, DX, CV
+            EX, VX, DX, CV, SKW, KRR
         )
