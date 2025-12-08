@@ -5,18 +5,40 @@ import pandas as pd
 import os
 from scipy.optimize import minimize
 
+OPTIMIZITATION_METHODS = Literal[
+    'return',
+    'risk',
+    'sharpe'
+]
+
+TIMEFRAME = Literal[
+    'daily',
+    'monthly',
+    'quarterly',
+    'annually',
+]
+
+#expect daily data !
+TIMEFRAME_NORM : Dict[TIMEFRAME, float]= {
+    'daily' : 1.0,
+    'monthly' : 21.0,
+    'quarterly' : 63.0,
+    'annually' : 252.0,
+}
+
 class PortfolioOptimizer():
     def __init__(
             self, 
             tickers : List[str],
             period : str = '5y',
-            interval : str = '1d'
+            interval : str = '1d',
+            dir_name : str | None = None
         ):
         self._tickers = tickers
         self._period = period
         self._interval = interval
         self._data : Dict[str, pd.DataFrame] = {}
-        self._DATA_PATH = f'data/portfolio/{self._tickers}p={self._period},i={self._interval}/'
+        self._DATA_PATH = f'data/portfolio/{self._tickers if not dir_name else dir_name}p={self._period},i={self._interval}/'
         os.makedirs(self._DATA_PATH, exist_ok=True)
 
         # Cached matrices
@@ -31,15 +53,32 @@ class PortfolioOptimizer():
         return df
 
     def download_data(self):
+        valid = {}
+
         for ticker in self._tickers:
-            df = yf.download(
-                ticker, 
-                period=self._period, 
-                interval=self._interval, 
-                auto_adjust=False
-            )
-            df = self._clean_data(df)
-            self._data[ticker] = df
+            try:
+                df = yf.download(
+                    ticker,
+                    period=self._period,
+                    interval=self._interval,
+                    auto_adjust=False,
+                    progress=False
+                )
+    
+                if df is None or df.empty:
+                    print(f"[WARN] Skipping {ticker}: no data returned")
+                    continue
+
+                df = self._clean_data(df)
+                valid[ticker] = df
+
+            except Exception as e:
+                print(f"[ERROR] Failed downloading {ticker}: {e}")
+                continue
+
+        self._data = valid
+        self._tickers = list(valid.keys())
+
 
     def enrich_data(self):
         # Compute log returns for each asset
@@ -50,7 +89,7 @@ class PortfolioOptimizer():
             df['LogChange'] = np.log1p(df['PctChange'])
             log_returns_dict[ticker] = df['LogChange']
         # Construct matrix
-        self._log_returns = pd.DataFrame(log_returns_dict)
+        self._log_returns = self._log_returns = pd.DataFrame(log_returns_dict).dropna()
         self._mean_returns = self._log_returns.mean()
         self._cov_matrix = self._log_returns.cov()
 
@@ -69,46 +108,102 @@ class PortfolioOptimizer():
         """Objective function for maximizing Sharpe: minimize negative Sharpe."""
         _, _, sharpe = self._portfolio_metrics(weights)
         return -sharpe
+    
+    def _objective_risk(self, weights: np.ndarray):
+        """Objective: minimize portfolio volatility."""
+        _, vol, _ = self._portfolio_metrics(weights)
+        return vol
+
+    def _objective_neg_return(self, weights: np.ndarray):
+        """Objective: maximize return by minimizing negative return."""
+        ret, _, _ = self._portfolio_metrics(weights)
+        return -ret
+
+    def _get_constraints(self, method: OPTIMIZITATION_METHODS, target : tuple[TIMEFRAME, float] | None):
+        constrains = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
+        if target is None: return constrains
+
+        _timeframe, _target = target
+        _norm = TIMEFRAME_NORM[_timeframe]
+
+        daily_var_target = (_target ** 2) / TIMEFRAME_NORM[_timeframe]
+        daily_ret_target = _target / _norm
+
+        match method:
+            case 'return':
+                constrains.append({"type": "eq", "fun": lambda w: np.dot(w, self._mean_returns) - daily_ret_target})
+            case 'risk':
+                constrains.append({"type": "eq", "fun": lambda w: w.T @ self._cov_matrix.values @ w - daily_var_target})
+        return constrains
 
     def optimize(
             self,
-            method: Literal['sharpe'] = 'sharpe',
+            method: OPTIMIZITATION_METHODS = 'sharpe',
+            target: tuple[TIMEFRAME, float] | None = None,
             bounds: List[tuple] = None,
             allow_short: bool = False
         ) -> Dict[str, float]:
         """Optimize portfolio weights."""
+        print(self._tickers)
         n_assets = len(self._tickers)
+
+        # Default bounds (no shorting unless specified)
         if bounds is None:
-            # default: no shorting
-            if allow_short:
-                bounds = [(-1.0, 1.0) for _ in range(n_assets)]
-            else:
-                bounds = [(0.0, 1.0) for _ in range(n_assets)]
+            bounds = [(-1.0, 1.0) for _ in range(n_assets)] if allow_short else [(0.0, 1.0)] * n_assets
 
-        # constraint: weights sum to 1
-        constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
+        # Constraint: weights sum to 1
+        constraints = self._get_constraints(
+            method=method,
+            target=target
+        )
 
-        # initial guess: equal weights
-        init_guess = np.array([1/n_assets]*n_assets)
+        # Initial guess: equal weighting
+        init_guess = np.array([1.0 / n_assets] * n_assets)
 
         if method == 'sharpe':
-            res = minimize(
-                self._objective_neg_sharpe,
-                init_guess,
-                method='SLSQP',
-                bounds=bounds,
-                constraints=constraints
-            )
+            objective = self._objective_neg_sharpe
+        elif method == 'risk':
+            objective = self._objective_risk
+        elif method == 'return':
+            objective = self._objective_neg_return
         else:
-            raise NotImplementedError(f"Optimization method {method} not implemented.")
+            raise NotImplementedError(f"Optimization method {method} is not implemented.")
+
+        res = minimize(
+            objective,
+            init_guess,
+            method='SLSQP',
+            bounds=bounds,
+            constraints=constraints
+        )
 
         optimal_weights = res.x
         port_return, port_vol, sharpe_ratio = self._portfolio_metrics(optimal_weights)
-
-        # return dict with weights + metrics
+    
         return {
             'weights': dict(zip(self._tickers, optimal_weights)),
             'expected_return': port_return,
             'volatility': port_vol,
             'sharpe_ratio': sharpe_ratio
         }
+
+    def interpret_result(self, result: Dict[str, float], timeframe: TIMEFRAME):
+        norm = TIMEFRAME_NORM[timeframe]
+
+        # Clean floats
+        weights = {k: float(v) for k, v in result["weights"].items()}
+        ret = float(result["expected_return"]) * norm
+        vol = float(result["volatility"]) * np.sqrt(norm)
+        sharpe = float(result["sharpe_ratio"]) * np.sqrt(norm)
+
+        print("=== Portfolio Results ===")
+        print(f"Timeframe         : {timeframe}")
+        print(f"Expected Return   : {ret:.4%}") 
+        print(f"Risk (Volatility) : {vol:.4%}")
+        print(f"Sharpe Ratio      : {sharpe:.4f}")
+        print("\n--- Allocations ---")
+        for asset, w in weights.items():
+            if w < 0.0001: continue
+            print(f"{asset:<10} : {w:.2%}")
+   
+
