@@ -44,7 +44,7 @@ class Filters:
 class TimeSeriesAnalyser(Filters):
     @staticmethod 
     def RawMoment(input_array : time_series_t, order : int = 0) -> float:
-        indexes = np.arange(1, len(input_array) + 1)   #assuming we index the ts from 0
+        indexes = np.arange(1, len(input_array) + 1)
         return np.sum(input_array * (indexes ** order))
     
     @staticmethod
@@ -150,8 +150,24 @@ class TimeSeriesAnalyser(Filters):
 
         return Filters.Convolution(
             input_array=input_array,
-            filter_=weights, 
+            filter_=weights,
         )
+    
+    @staticmethod
+    def EWMA(input_array : time_series_t, window : int, alpha : float) -> time_series_t:
+        if not 0 < alpha < 1:
+            raise ValueError("alpha must be in (0,1)")
+        
+        weights = np.array([(1 - alpha)**k for k in range(window)], dtype=float)
+        weights /= weights.sum()
+
+        y = np.zeros_like(input_array, dtype=float)
+
+        for i in range(window, len(input_array)):
+            for k in range(window):
+                y[i] += input_array[i-k] * weights[k]
+        return y
+
     
     @staticmethod
     def AutoCorrelationAnalysis(input_array : time_series_t, MAX_LAG = 30) -> List[float]:
