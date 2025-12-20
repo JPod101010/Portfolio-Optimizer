@@ -1,0 +1,21 @@
+BLACKLIST = [
+    'WRK',
+    'SIVB',
+    'XLNX',
+    'CFX',
+    'FBHS',
+    'HES',
+    'BF.B',
+    'CERN',
+    'DRE',
+    'ARVI',
+    'ABMD',
+    'PXD',
+    'PEAK',
+    'PKI',
+    'COG',
+    'LLR',
+    'BRK.B',
+    'SP500',
+    'sp500'
+]

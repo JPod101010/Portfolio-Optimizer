@@ -2,8 +2,13 @@ from typing import List, Dict, Literal
 import numpy as np
 import yfinance as yf
 import pandas as pd
+from pathlib import Path
 import os
+from .sp500_ticks import sp500_ticks
+from .blacklist import BLACKLIST
 from scipy.optimize import minimize
+
+PATH_TO_DATA_PORTFOLIO = Path(__file__).parent.parent.parent.parent.parent / "data" / "portfolio"
 
 OPTIMIZITATION_METHODS = Literal[
     'return',
@@ -32,14 +37,19 @@ class PortfolioOptimizer():
             tickers : List[str],
             period : str = '5y',
             interval : str = '1d',
-            dir_name : str | None = None
+            dir_name : str = 'perfect-portfolio'
         ):
         self._tickers = tickers
+        sp500_flag = False
+        for ticker in self._tickers:
+            if ticker in ['sp500','SP500']:
+                sp500_flag = True
+        if sp500_flag:
+            self._tickers.extend(sp500_ticks)
+
         self._period = period
         self._interval = interval
         self._data : Dict[str, pd.DataFrame] = {}
-        self._DATA_PATH = f'data/portfolio/{self._tickers if not dir_name else dir_name}p={self._period},i={self._interval}/'
-        os.makedirs(self._DATA_PATH, exist_ok=True)
 
         # Cached matrices
         self._log_returns : pd.DataFrame = pd.DataFrame()
@@ -56,6 +66,13 @@ class PortfolioOptimizer():
         valid = {}
 
         for ticker in self._tickers:
+            print(os.listdir(PATH_TO_DATA_PORTFOLIO))
+            if ticker in BLACKLIST:
+                continue
+            if f"{ticker}.csv" in os.listdir(PATH_TO_DATA_PORTFOLIO):
+                valid[ticker] = pd.read_csv(f"{PATH_TO_DATA_PORTFOLIO}/{ticker}.csv")
+                continue
+
             try:
                 df = yf.download(
                     ticker,
@@ -67,10 +84,12 @@ class PortfolioOptimizer():
     
                 if df is None or df.empty:
                     print(f"[WARN] Skipping {ticker}: no data returned")
+
                     continue
 
                 df = self._clean_data(df)
                 valid[ticker] = df
+                df.to_csv(f"{PATH_TO_DATA_PORTFOLIO}/{ticker}.csv")
 
             except Exception as e:
                 print(f"[ERROR] Failed downloading {ticker}: {e}")
@@ -144,7 +163,6 @@ class PortfolioOptimizer():
             allow_short: bool = False
         ) -> Dict[str, float]:
         """Optimize portfolio weights."""
-        print(self._tickers)
         n_assets = len(self._tickers)
 
         # Default bounds (no shorting unless specified)
@@ -179,9 +197,9 @@ class PortfolioOptimizer():
 
         optimal_weights = res.x
         port_return, port_vol, sharpe_ratio = self._portfolio_metrics(optimal_weights)
-    
+        result_portfolio = {k: v for k, v in zip(self._tickers, optimal_weights) if v > 0.00000000001}
         return {
-            'weights': dict(zip(self._tickers, optimal_weights)),
+            'weights': result_portfolio,
             'expected_return': port_return,
             'volatility': port_vol,
             'sharpe_ratio': sharpe_ratio
