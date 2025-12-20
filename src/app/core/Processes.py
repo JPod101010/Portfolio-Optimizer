@@ -1,6 +1,6 @@
 import random
 import numpy as np
-from app.src.timeseries.TimeSeriesAnalyser import time_series_t
+from app.core.timeseries.TimeSeriesAnalyser import time_series_t
 from typing import List, Optional
 
 class RandomWalk():
