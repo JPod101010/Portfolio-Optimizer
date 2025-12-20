@@ -7,7 +7,7 @@ from app.core.visualizers.Visualizer import Visualizer
 
 st.set_page_config(page_title="Timeseries",layout="wide",page_icon="X")
 st.title("Timeseries analyzer")
-st.header("This module shows some basic timeseries data, and is also able to show their properties on demand")
+st.header("This module shows some basic timeseries data")
 
 st.divider()
 
@@ -31,7 +31,6 @@ def load_data(ticker):
 
 if timeseries_ticker:
     df = load_data(timeseries_ticker)
-    st.write(f"Index Type: {type(df.index)}")
     col1, col2 = st.columns(2)
 
     with col1: show_mean = st.checkbox("-Mean")
