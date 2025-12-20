@@ -5,9 +5,8 @@ from app.core.portfolioOptimizer.PortfolioOptimizer import (
     PortfolioOptimizer,
     TIMEFRAME_NORM
 )
-import matplotlib.pyplot as plt
 
-
+st.set_page_config(page_title="Portfolio Optimizer",layout="wide",page_icon="X")
 st.title("Portfolio Optimizer")
 st.header("This module computes the optimal portfolio of selected stocks by a selected metric")
 
@@ -22,16 +21,20 @@ method = st.selectbox("Choose a method:", methods)
 st.divider()
 
 if tickers_list and method:
-    _po = PortfolioOptimizer(
-        tickers=tickers_list.split(","),
-    )
-    _po.download_data()
-    _po.enrich_data()
-    portfolio = _po.optimize(
-        method=method,
-    )
+    with st.spinner(f"Optimizing portfolio for {tickers_list}..."):
+       
+       _po = PortfolioOptimizer(
+           tickers=tickers_list.split(","),
+       )
+       
+       _po.download_data()
+       _po.enrich_data()
+       
+       portfolio = _po.optimize(
+           method=method,
+       )
 
-    timeframe = st.selectbox("Choose a timeframe:", timeframes)
+    timeframe = st.selectbox("Choose a display timeframe:", timeframes)
     timeframe_norm = TIMEFRAME_NORM[timeframe]
 
 
@@ -41,10 +44,8 @@ if tickers_list and method:
     col2.metric("Volatility", f"{portfolio['volatility']*100*np.sqrt(timeframe_norm):.2f}%")
     col3.metric("Sharpe Ratio", f"{portfolio['sharpe_ratio']*np.sqrt(timeframe_norm):.2f}")
 
-    # --- Display Portfolio Allocations as a Histogram ---
     st.subheader("Portfolio Allocation")
 
-    # Convert weights to DataFrame
     weights_df = pd.DataFrame(list(portfolio["weights"].items()), columns=["Asset", "Weight"])
     weights_df['Assets'] = weights_df.apply(lambda row: f"{row['Asset']} : {row['Weight']:.2f}", axis=1)
     st.bar_chart(data=weights_df, x='Asset', y='Weight')
