@@ -4,8 +4,6 @@ import pandas as pd, numpy as np
 
 PATH_TO_DATA = Path(__file__).parent.parent.parent / "data" / "portfolio"
 
-
-
 def compute_returs(df : pd.DataFrame) -> pd.DataFrame:
     df['RawChange'] = df['Close'].diff()
     df['PctChange'] = df['Close'].pct_change()

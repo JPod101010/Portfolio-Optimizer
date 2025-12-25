@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd, numpy as np
 import altair as alt
+from app.database_engine import ENGINE
 from app.core.portfolioOptimizer.PortfolioOptimizer import (
     PortfolioOptimizer,
     TIMEFRAME_NORM
@@ -20,20 +21,28 @@ timeframes = ['daily', 'monthly', 'quarterly', 'annually']
 method = st.selectbox("Choose a method:", methods)
 st.divider()
 
-if tickers_list and method:
-    with st.spinner(f"Optimizing portfolio for {tickers_list}..."):
-       
-       _po = PortfolioOptimizer(
-           tickers=tickers_list.split(","),
-       )
-       
-       _po.download_data()
-       _po.enrich_data()
-       
-       portfolio = _po.optimize(
-           method=method,
-       )
+@st.cache_data(show_spinner="Loading market data...")
+def load_prices_from_db():
+    query = "SELECT * FROM prices"
+    return pd.read_sql(query, ENGINE, parse_dates=["date_"])
 
+@st.cache_data(show_spinner="Optimizing portfolio...")
+def compute_portfolio(tickers, method, prices_df):
+    po = PortfolioOptimizer(tickers=tickers)
+    po.load_data_from_dataframe(prices_df)
+    return po.optimize(method=method)
+
+if tickers_list and method:
+    
+    prices_df = load_prices_from_db()
+       
+    portfolio = compute_portfolio(
+        tickers=list(t.strip() for t in tickers_list.split(",")),
+        method=method,
+        prices_df=prices_df,
+    )
+
+    
     timeframe = st.selectbox("Choose a display timeframe:", timeframes)
     timeframe_norm = TIMEFRAME_NORM[timeframe]
 
@@ -47,7 +56,7 @@ if tickers_list and method:
     st.subheader("Portfolio Allocation")
 
     weights_df = pd.DataFrame(list(portfolio["weights"].items()), columns=["Asset", "Weight"])
-    weights_df['Assets'] = weights_df.apply(lambda row: f"{row['Asset']} : {row['Weight']:.2f}", axis=1)
+    weights_df['Assets'] = weights_df.apply(lambda row: f"{row['Asset']} : {row['Weight']:.4f}", axis=1)
     st.bar_chart(data=weights_df, x='Asset', y='Weight')
 
     fig = alt.Chart(weights_df).mark_arc().encode(
