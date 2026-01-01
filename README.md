@@ -3,10 +3,15 @@
 ```bash
 git clone https://github.com/JPod101010/Portfolio-Optimizer.git
 cd Portfolio-Optimizer
+docker compose up --build
+```
+
+To run locally (unrecommended):
+```bash
 chmod u+x run.sh
 ./run.sh --db-init
-
 ```
+
 - Argument `--db-init` initializes database, after running it once there is no need for it
 
 ## Dear reader
