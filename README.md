@@ -16,6 +16,8 @@ chmod u+x run.sh
 - Argument `--db-init` initializes database
 - This also requires the change of `src/app/database_engine.py` to localhost
 
+Then the application will be running on port 8501.
+
 ## Dear reader
 - The project was build purely in python (with a little SQL)
 - The aim of this project is to give the user some visuals and
