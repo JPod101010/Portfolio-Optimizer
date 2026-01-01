@@ -12,7 +12,8 @@ chmod u+x run.sh
 ./run.sh --db-init
 ```
 
-- Argument `--db-init` initializes database, after running it once there is no need for it
+- Argument `--db-init` initializes database
+- This also requires the change of `src/app/database_engine.py` to localhost
 
 ## Dear reader
 - The project was build purely in python (with a little SQL)
