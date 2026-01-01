@@ -3,6 +3,7 @@
 ```bash
 git clone https://github.com/JPod101010/Portfolio-Optimizer.git
 cd Portfolio-Optimizer
+cp .env.example .env
 docker compose up --build
 ```
 
