@@ -55,67 +55,27 @@ class PortfolioOptimizer():
         self._log_returns : pd.DataFrame = pd.DataFrame()
         self._cov_matrix : pd.DataFrame = pd.DataFrame()
         self._mean_returns : pd.Series = pd.Series()
-
-    def _clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        # Flatten MultiIndex columns
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        return df
-
-    def download_data(self):
-        valid = {}
-
-        for ticker in self._tickers:
-            print(os.listdir(PATH_TO_DATA_PORTFOLIO))
-            if ticker in BLACKLIST:
-                continue
-            if f"{ticker}.csv" in os.listdir(PATH_TO_DATA_PORTFOLIO):
-                valid[ticker] = pd.read_csv(f"{PATH_TO_DATA_PORTFOLIO}/{ticker}.csv")
-                continue
-
-            try:
-                df = yf.download(
-                    ticker,
-                    period=self._period,
-                    interval=self._interval,
-                    auto_adjust=False,
-                    progress=False
-                )
+        
+    def load_data_from_dataframe(self, df: pd.DataFrame):
+        df = df[df["symbol"].isin(self._tickers)]
     
-                if df is None or df.empty:
-                    print(f"[WARN] Skipping {ticker}: no data returned")
-
-                    continue
-
-                df = self._clean_data(df)
-                valid[ticker] = df
-                df.to_csv(f"{PATH_TO_DATA_PORTFOLIO}/{ticker}.csv")
-
-            except Exception as e:
-                print(f"[ERROR] Failed downloading {ticker}: {e}")
-                continue
-
-        self._data = valid
-        self._tickers = list(valid.keys())
-
-
-    def enrich_data(self):
-        # Compute log returns for each asset
-        log_returns_dict = {}
-        for ticker, df in self._data.items():
-            df['RawChange'] = df['Close'].diff()
-            df['PctChange'] = df['Close'].pct_change()
-            df['LogChange'] = np.log1p(df['PctChange'])
-            log_returns_dict[ticker] = df['LogChange']
-        # Construct matrix
-        self._log_returns = self._log_returns = pd.DataFrame(log_returns_dict).dropna()
+        data_dict = {}
+        log_returns = []
+    
+        for ticker in df["symbol"].unique():
+            df_t = df[df["symbol"] == ticker].sort_values("date_")
+            df_t = df_t.set_index("date_")
+    
+            data_dict[ticker] = df_t
+            log_returns.append(df_t["logpercent_diff"].rename(ticker))
+    
+        self._tickers = list(data_dict.keys())
+        self._data = data_dict
+    
+        self._log_returns = pd.concat(log_returns, axis=1).dropna()
         self._mean_returns = self._log_returns.mean()
         self._cov_matrix = self._log_returns.cov()
-
-    def save_data(self):
-        for ticker, dataframe in self._data.items():
-            dataframe.to_csv(f"{self._DATA_PATH}{ticker}.csv")
-
+    
     def _portfolio_metrics(self, weights: np.ndarray):
         """Compute portfolio return, volatility, and Sharpe ratio."""
         port_return = np.dot(weights, self._mean_returns)
@@ -197,7 +157,7 @@ class PortfolioOptimizer():
 
         optimal_weights = res.x
         port_return, port_vol, sharpe_ratio = self._portfolio_metrics(optimal_weights)
-        result_portfolio = {k: v for k, v in zip(self._tickers, optimal_weights) if v > 0.00000000001}
+        result_portfolio = {k: v for k, v in zip(self._tickers, optimal_weights) if v > 0.0000001}
         return {
             'weights': result_portfolio,
             'expected_return': port_return,
